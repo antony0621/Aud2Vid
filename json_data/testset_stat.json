@@ -1,0 +1,23 @@
+{
+    "acoustic_guitar": 370,
+    "saxophone": 56,
+    "erhu": 110,
+    "accordion": 165,
+    "flute": 93,
+    "banjo": 186,
+    "tuba": 112,
+    "piano": 306,
+    "guzheng": 302,
+    "cello": 148,
+    "drum": 293,
+    "pipa": 245,
+    "violin": 253,
+    "trumpet": 59,
+    "bassoon": 258,
+    "electric_bass": 187,
+    "ukulele": 220,
+    "xylophone": 150,
+    "bagpipe": 279,
+    "congas": 309,
+    "clarinet": 70
+}
