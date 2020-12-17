@@ -68,7 +68,7 @@ def main():
     # Parse URLs json file and get a list of YouTube IDs to download
     print("Parsing URLs json file...")
     json_file = json.load(open(video_json_file, 'r'))
-    video_dict = json_file['videos']  # a dict like {'A': [id1, id2, ...], 'B': [id1, id2, ...], ...}
+    video_dict = json_file['videos']
     video_names_list = list(video_dict.keys())
 
     # Define the specific classes to downloaded
@@ -82,7 +82,7 @@ def main():
 
         video_output_dir = osp.join(dataset_dir, video_name)
 
-        # Download YouTube videos for given IDs
+        # Download YouTube videos according to given IDs
         print("\nDownloading videos of {}...".format(video_name))
         pool = Pool(args.workers)
         for _ in tqdm(pool.imap_unordered(download_video, video_ids), total=len(video_ids)):
