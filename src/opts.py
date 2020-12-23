@@ -20,7 +20,7 @@ def parse_opts():
         help='weight of reconstruction loss.')
     parser.add_argument(
         '--input_size',
-        default=(128, 256),
+        default=(128, 128),
         type=tuple,
         help='input image size')
     parser.add_argument(

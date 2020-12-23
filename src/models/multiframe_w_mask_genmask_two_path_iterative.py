@@ -10,16 +10,17 @@ import logging
 import torchvision.utils as tov
 
 import sys
+
 sys.path.insert(0, '../utils')
-from utils import utils
-from utils import ops
-from models.vgg_utils import my_vgg
+from src.utils import utils
+from src.utils import ops
+from src.models.vgg_utils import my_vgg
 
 
 class motion_net(nn.Module):
-    def __init__(self, opt, input_channel, output_channel=int(1024/2)):
+    def __init__(self, opt, input_channel, output_channel=int(1024 / 2)):
         super(motion_net, self).__init__()
-         # input 3*128*128
+        # input 3*128*128
         self.main = nn.Sequential(
             nn.Conv2d(input_channel, 32, 4, 2, 1, bias=False),  # 64
             nn.LeakyReLU(0.2, inplace=True),
@@ -50,7 +51,7 @@ class motion_net(nn.Module):
 
 class gateconv3d_bak(nn.Module):
     def __init__(self, innum, outnum, kernel, stride, pad):
-        super(gateconv3d, self).__init__()
+        super(gateconv3d_bak, self).__init__()
         self.conv = nn.Conv3d(innum, outnum * 2, kernel, stride, pad, bias=True)
         self.bn = nn.BatchNorm3d(outnum * 2)
 
@@ -175,19 +176,26 @@ class decoder(nn.Module):
     def forward(self, enco1, enco2, enco3, z):
         opt = self.opt
         deco1 = self.dconv1(z)  # .view(-1,256,4,4,4)# bs*4,256,8,8
-        deco2 = torch.cat(torch.chunk(self.dconv2(deco1).unsqueeze(2), opt.num_predicted_frames, 0), 2)  # bs*4,128,16,16
-        deco2 = torch.cat(torch.unbind(torch.cat([deco2, torch.unsqueeze(enco3, 2).repeat(1, 1, opt.num_predicted_frames, 1, 1)], 1), 2), 0)
+        deco2 = torch.cat(torch.chunk(self.dconv2(deco1).unsqueeze(2), opt.num_predicted_frames, 0),
+                          2)  # bs*4,128,16,16
+        deco2 = torch.cat(
+            torch.unbind(torch.cat([deco2, torch.unsqueeze(enco3, 2).repeat(1, 1, opt.num_predicted_frames, 1, 1)], 1),
+                         2), 0)
         deco3 = torch.cat(self.dconv3(deco2).unsqueeze(2).chunk(opt.num_predicted_frames, 0), 2)  # 128,32,32
         deco3 = self.gateconv1(deco3)
-        deco3 = torch.cat(torch.unbind(torch.cat([deco3, torch.unsqueeze(enco2, 2).repeat(1, 1, opt.num_predicted_frames, 1, 1)], 1), 2), 0)
+        deco3 = torch.cat(
+            torch.unbind(torch.cat([deco3, torch.unsqueeze(enco2, 2).repeat(1, 1, opt.num_predicted_frames, 1, 1)], 1),
+                         2), 0)
         deco4 = torch.cat(self.dconv4(deco3).unsqueeze(2).chunk(opt.num_predicted_frames, 0), 2)  # 32,4,64,64
         deco4 = self.gateconv2(deco4)
-        deco4 = torch.cat(torch.unbind(torch.cat([deco4, torch.unsqueeze(enco1, 2).repeat(1, 1, opt.num_predicted_frames, 1, 1)], 1), 2), 0)
+        deco4 = torch.cat(
+            torch.unbind(torch.cat([deco4, torch.unsqueeze(enco1, 2).repeat(1, 1, opt.num_predicted_frames, 1, 1)], 1),
+                         2), 0)
         return deco4
 
 
-mean = Vb(torch.FloatTensor([0.485, 0.456, 0.406])).view([1,3,1,1])
-std = Vb(torch.FloatTensor([0.229, 0.224, 0.225])).view([1,3,1,1])
+mean = Vb(torch.FloatTensor([0.485, 0.456, 0.406])).view([1, 3, 1, 1])
+std = Vb(torch.FloatTensor([0.229, 0.224, 0.225])).view([1, 3, 1, 1])
 
 
 class VAE(nn.Module):
@@ -198,9 +206,9 @@ class VAE(nn.Module):
         self.hallucination = hallucination
 
         # BG
-        self.motion_net_bg = motion_net(opt, int(opt.num_frames*opt.input_channel)+11, bg)
+        self.motion_net_bg = motion_net(opt, int(opt.num_frames * opt.input_channel) + 11, bg)
         # FG
-        self.motion_net_fg = motion_net(opt, int(opt.num_frames*opt.input_channel)+9, fg)
+        self.motion_net_fg = motion_net(opt, int(opt.num_frames * opt.input_channel) + 9, fg)
 
         self.encoder = encoder(opt)
         self.flow_decoder = decoder(opt)
@@ -208,7 +216,7 @@ class VAE(nn.Module):
             self.raw_decoder = decoder(opt)
             self.predict = get_frames(opt)
 
-        self.zconv = convbase(256 + 64, 16*self.opt.num_predicted_frames, 3, 1, 1)
+        self.zconv = convbase(256 + 64, 16 * self.opt.num_predicted_frames, 3, 1, 1)
         self.floww = ops.flowwrapper()
         self.fc = nn.Linear(1024, 1024)
         self.flownext = getflow()
@@ -216,7 +224,7 @@ class VAE(nn.Module):
         self.get_mask = get_occlusion_mask()
         self.refine = refine
         if self.refine:
-            from models.vgg_128 import RefineNet
+            from src.models.vgg_128 import RefineNet
             self.refine_net = RefineNet(num_channels=opt.input_channel)
 
         vgg19 = torchvision.models.vgg19(pretrained=True)
@@ -238,8 +246,8 @@ class VAE(nn.Module):
 
     def forward(self, x, data, bg_mask, fg_mask, noise_bg, z_m=None):
 
-        frame1 = data[:, 0, :, :, :]
-        frame2 = data[:, 1:, :, :, :]
+        frame1 = data[:, 0, :, :, :]  # bs,3,128,128
+        frame2 = data[:, 1:, :, :, :]  # bs,t,3,128,128
 
         mask = torch.cat([bg_mask, fg_mask], 1)
         input = torch.cat([x, mask], 1)
@@ -249,7 +257,6 @@ class VAE(nn.Module):
         opt = self.opt
 
         if z_m is None:
-
             y = torch.cat(
                 [frame1, frame2.contiguous().view(-1, opt.num_predicted_frames * opt.input_channel, opt.input_size[0],
                                                   opt.input_size[1]) -
@@ -263,7 +270,7 @@ class VAE(nn.Module):
             # BG
             mu_bg, logvar_bg = self.motion_net_bg(torch.cat([y, bg_mask], 1).contiguous())
             # FG
-            mu_fg, logvar_fg = self.motion_net_fg(torch.cat([y , fg_mask], 1).contiguous())
+            mu_fg, logvar_fg = self.motion_net_fg(torch.cat([y, fg_mask], 1).contiguous())
 
             mu = torch.cat([mu_bg, mu_fg], 1)
             logvar = torch.cat([logvar_bg, logvar_fg], 1)
@@ -275,16 +282,18 @@ class VAE(nn.Module):
             # print (z_m.size())
             z_m = self.reparameterize(mu, logvar)
 
-
-        codey = self.zconv(torch.cat([self.fc(z_m).view(-1, 64, int(opt.input_size[0]/16), int(opt.input_size[1]/16)), codex], 1))
+        codey = self.zconv(
+            torch.cat([self.fc(z_m).view(-1, 64, int(opt.input_size[0] / 16), int(opt.input_size[1] / 16)), codex], 1)) # bs,64,8,8
         codex = torch.unsqueeze(codex, 2).repeat(1, 1, opt.num_predicted_frames, 1, 1)  # bs,256,4,8,8
         codey = torch.cat(torch.chunk(codey.unsqueeze(2), opt.num_predicted_frames, 1), 2)  # bs,16,4,8,8
-        z = torch.cat(torch.unbind(torch.cat([codex, codey], 1), 2), 0)  # (256L, 272L, 8L, 8L)   272-256=16
+        z = torch.cat(torch.unbind(torch.cat([codex, codey], 1), 2), 0)  # (bs*4, 272L, 8L, 8L)   272-256=16
 
         # Flow Decoder Network --> decode latent vectors into flow fields.
         flow_deco4 = self.flow_decoder(enco1, enco2, enco3, z)  # (256, 64, 64, 64)
-        flow = torch.cat(self.flownext(flow_deco4).unsqueeze(2).chunk(opt.num_predicted_frames, 0), 2)  # (64, 2, 4, 128, 128)
-        flowback = torch.cat(self.flowprev(flow_deco4).unsqueeze(2).chunk(opt.num_predicted_frames, 0), 2) # (64, 2, 4, 128, 128)
+        flow = torch.cat(self.flownext(flow_deco4).unsqueeze(2).chunk(opt.num_predicted_frames, 0),
+                         2)  # (64, 2, 4, 128, 128)
+        flowback = torch.cat(self.flowprev(flow_deco4).unsqueeze(2).chunk(opt.num_predicted_frames, 0),
+                             2)  # (64, 2, 4, 128, 128)
 
         # Warp frames using computed flows
         # out = [torch.unsqueeze(self.floww(x, flow[:, :, i, :, :]), 1) for i in range(opt.num_predicted_frames)]
@@ -320,4 +329,5 @@ class VAE(nn.Module):
 
             return output, y_pred, mu, logvar, flow, flowback, mask_fw, mask_bw, prediction_vgg_feature, gt_vgg_feature
         else:
-            return output, y_pred, flow, flowback, mask_fw, mask_bw, output_bg_mask[:, -1, ...], output_fg_mask[:, -1, ...]
+            return output, y_pred, flow, flowback, mask_fw, mask_bw, output_bg_mask[:, -1, ...], output_fg_mask[:, -1,
+                                                                                                 ...]

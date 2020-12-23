@@ -9,6 +9,7 @@ import torchvision.utils  as tov
 import cv2
 import datetime
 import numpy as np
+from src.losses import TrainingLoss
 
 
 def make_color_wheel():
@@ -135,8 +136,8 @@ def compute_color(u, v):
 #     cv2.imwrite(savepath, flow)
 
 def saveflow(flows, imgsize, savepath):
-    u = flows[:, :, 0]*3
-    v = flows[:, :, 1]*3
+    u = flows[:, :, 0] * 3
+    v = flows[:, :, 1] * 3
     image = compute_color(u, v)
     flow = cv2.resize(image, imgsize)
     cv2.imwrite(savepath, flow)
@@ -148,6 +149,7 @@ def compute_flow_color_map(flows):
     flow = compute_color(u, v)
     # flow = cv2.resize(image, imgsize)
     return flow
+
 
 def compute_flow_img(flows, imgsize, size):
     # import pdb
@@ -161,10 +163,12 @@ def compute_flow_img(flows, imgsize, size):
     return image
     # cv2.imwrite(savepath, image)
 
+
 import imageio
 
+
 def save_flow_sequence(flows, length, imgsize, size, savepath):
-    flow_seq = [np.uint8(compute_flow_img(flows[:,i,...], imgsize, size)) for i in range(length)]
+    flow_seq = [np.uint8(compute_flow_img(flows[:, i, ...], imgsize, size)) for i in range(length)]
     imageio.mimsave(savepath, flow_seq, fps=int(length))
 
 
@@ -207,6 +211,25 @@ class flowwrapper(nn.Module):
         grid = base_grid - flow
         # print grid.size()
         out = F.grid_sample(x, grid)
+        return out
+
+
+class Warp(nn.Module):
+    def __init__(self, W, H, opt):
+        super(Warp, self).__init__()
+
+        self.W, self.H = W, H
+        gridX, gridY = np.meshgrid(np.arange(W), np.arange(H))
+        self.gridX = torch.tensor(gridX / W, requires_grad=False, device=opt.device)
+        self.gridY = torch.tensor(gridY / H, requires_grad=False, device=opt.device)
+
+    def forward(self, img, flow):
+        u = flow[:, 0, :, :]
+        v = flow[:, 1, :, :]
+        x = self.gridX.unsqueeze(0).expand_as(u).float() + u  # add batch size dim on the grid
+        y = self.gridY.unsqueeze(0).expand_as(v).float() + v
+        grid = torch.stack((x, y), 3)
+        out = F.grid_sample(img, grid)
         return out
 
 
@@ -256,7 +279,7 @@ def gradienty(img):
 
 
 def length_sq(x):
-    return torch.sum(x**2, dim=1)
+    return torch.sum(x ** 2, dim=1)
 
 
 def occlusion(flow, flowback, flowwarp, opt):
@@ -274,13 +297,13 @@ def occlusion(flow, flowback, flowwarp, opt):
     occ_fw = (length_sq(flow_diff_fw) > occ_thresh).float().unsqueeze(1)
     occ_bw = (length_sq(flow_diff_bw) > occ_thresh).float().unsqueeze(1)
 
-    return 1-occ_fw, 1-occ_bw
+    return 1 - occ_fw, 1 - occ_bw
 
 
 def get_occlusion_mask(flow, flowback, flowwarpper, opt, t=4):
     mask_fw = []
     mask_bw = []
-    for i in xrange(t):
+    for i in range(t):
         tmp_mask_fw, tmp_mask_bw = occlusion(flow[:, :, i, :, :], flowback[:, :, i, :, :], flowwarpper, opt)
 
         mask_fw.append(tmp_mask_fw)
@@ -289,6 +312,7 @@ def get_occlusion_mask(flow, flowback, flowwarpper, opt, t=4):
     mask_bw = torch.cat(mask_bw, 1)
     mask_fw = torch.cat(mask_fw, 1)
     return mask_fw, mask_bw
+
 
 def warp(frame, flow, opt, flowwarpper, mask):
     '''Use mask before warpping'''
@@ -310,28 +334,31 @@ def refine(input, flow, mask, refine_net, opt, noise_bg):
     '''Go through the refine network.'''
     # apply mask to the warpped image
     out = [torch.unsqueeze(refine_net(input[:, i, ...] * mask[:, i:i + 1, ...] + noise_bg * (1. - mask[:, i:i + 1, ...])
-                                           , flow[:, :, i, :, :]
+                                      , flow[:, :, i, :, :]
                                       ), 1) for i in range(opt.num_predicted_frames)]
 
     out = torch.cat(out, 1)
     return out
 
+
 def refine_id(input, flow, mask, refine_net, opt, noise_bg):
     '''Go through the refine network.'''
     # apply mask to the warpped image
-    out = [torch.unsqueeze(refine_net(input[:, i+1, ...] * mask[:, i:i + 1, ...] + noise_bg * (1. - mask[:, i:i + 1, ...])
-                                           , flow[:, :, i, :, :]
-                                      ), 1) for i in range(opt.num_predicted_frames)]
+    out = [torch.unsqueeze(
+        refine_net(input[:, i + 1, ...] * mask[:, i:i + 1, ...] + noise_bg * (1. - mask[:, i:i + 1, ...])
+                   , flow[:, :, i, :, :]
+                   ), 1) for i in range(opt.num_predicted_frames)]
     out1 = [refine_net(input[:, 0, ...], flow[:, :, 0, :, :]).unsqueeze(1)]
 
-    out = torch.cat(out1+out, 1)
+    out = torch.cat(out1 + out, 1)
     return out
+
 
 def refine_w_mask(input, ssmask, flow, mask, refine_net, opt, noise_bg):
     '''Go through the refine network.'''
     # apply mask to the warpped image
     out = [torch.unsqueeze(refine_net(input[:, i, ...] * mask[:, i:i + 1, ...] + noise_bg * (1. - mask[:, i:i + 1, ...])
-                                           , flow[:, :, i, :, :], ssmask[:, i, ...]
+                                      , flow[:, :, i, :, :], ssmask[:, i, ...]
                                       ), 1) for i in range(opt.num_predicted_frames)]
 
     out = torch.cat(out, 1)
@@ -339,27 +366,25 @@ def refine_w_mask(input, ssmask, flow, mask, refine_net, opt, noise_bg):
 
 
 if __name__ == '__main__':
-
     viewflow('a')
     # viewflow('/ssd/10.10.20.21/share/guojiaming/UCF-101/Surfing/v_Surfing_g15_c02.avi')
 
     img = Vb(torch.randn([16, 3, 128, 128]).div(40)).cuda()
     flow = Vb(torch.randn([16, 2, img.size()[2], img.size()[3]]).div(40)).cuda()
     begin = datetime.datetime.now()
-    print (quickflowloss(flow, img))
+    print(TrainingLoss.quickflowloss(flow, img))
     end = datetime.datetime.now()
-    time2 = end-begin
-    print (time2.total_seconds())
+    time2 = end - begin
+    print(time2.total_seconds())
 
-
-    neighber=5
-    bound = ((neighber-1)/2)
+    neighber = 5
+    bound = ((neighber - 1) / 2)
     x = torch.zeros([neighber, neighber])
     linear_points = torch.linspace(-bound, bound, neighber)
     x = torch.ger(torch.ones(neighber), linear_points).expand_as(x)
 
     y = torch.ger(linear_points, torch.ones(neighber)).expand_as(x)
-    dst = x**2+y**2
-    print (dst)
+    dst = x ** 2 + y ** 2
+    print(dst)
 
     testcode()
