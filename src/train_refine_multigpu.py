@@ -60,7 +60,7 @@ class flowgen(object):
         if torch.cuda.device_count() > 1:
             vae = nn.DataParallel(vae).cuda()
 
-        objective_func = losses.losses_multigpu_only_mask(opt, vae.module.floww)
+        objective_func = losses.LossesMaskEst(opt, vae.module.floww)
 
         print(self.jobname)
 

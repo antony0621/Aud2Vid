@@ -186,9 +186,9 @@ def saveflowopencv(flows, imgsize, size, savepath):
     cv2.imwrite(savepath, bgr)
 
 
-class flowwrapper(nn.Module):
+class FlowWrapper(nn.Module):
     def __init__(self):
-        super(flowwrapper, self).__init__()
+        super(FlowWrapper, self).__init__()
 
     def forward(self, x, flow):
         # flow: (batch size, 2, height, width)
@@ -215,9 +215,11 @@ class flowwrapper(nn.Module):
 
 
 class Warp(nn.Module):
+    """
+    Similar implementation compared with SuperSloMo and DeepSloMo.
+    """
     def __init__(self, W, H, opt):
         super(Warp, self).__init__()
-
         self.W, self.H = W, H
         gridX, gridY = np.meshgrid(np.arange(W), np.arange(H))
         self.gridX = torch.tensor(gridX / W, requires_grad=False, device=opt.device)
@@ -234,7 +236,7 @@ class Warp(nn.Module):
 
 
 def testcode():
-    a = flowwrapper()
+    a = FlowWrapper()
     img = cv2.imread('image.jpg')
     b, g, r = cv2.split(img)
     img = cv2.merge([r, g, b])
@@ -301,6 +303,9 @@ def occlusion(flow, flowback, flowwarp, opt):
 
 
 def get_occlusion_mask(flow, flowback, flowwarpper, opt, t=4):
+    """
+    Added: Is this function used in network pipeline orr just in visualization of occluded map ?
+    """
     mask_fw = []
     mask_bw = []
     for i in range(t):

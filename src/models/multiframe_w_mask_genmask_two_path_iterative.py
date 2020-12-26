@@ -2,19 +2,13 @@ import torch
 from torch.autograd import Variable as Vb
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.nn.init as init
 import torchvision.models
-import torch.optim as optim
-import os
-import logging
-import torchvision.utils as tov
 
 import sys
 
 sys.path.insert(0, '../utils')
-from src.utils import utils
 from src.utils import ops
-from src.models.vgg_utils import my_vgg
+from models.vgg.vgg_utils import my_vgg
 
 
 class motion_net(nn.Module):
@@ -217,14 +211,14 @@ class VAE(nn.Module):
             self.predict = get_frames(opt)
 
         self.zconv = convbase(256 + 64, 16 * self.opt.num_predicted_frames, 3, 1, 1)
-        self.floww = ops.flowwrapper()
+        self.floww = ops.FlowWrapper()
         self.fc = nn.Linear(1024, 1024)
         self.flownext = getflow()
         self.flowprev = getflow()
         self.get_mask = get_occlusion_mask()
         self.refine = refine
         if self.refine:
-            from src.models.vgg_128 import RefineNet
+            from models.vgg import RefineNet
             self.refine_net = RefineNet(num_channels=opt.input_channel)
 
         vgg19 = torchvision.models.vgg19(pretrained=True)

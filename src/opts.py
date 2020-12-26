@@ -4,6 +4,21 @@ import argparse
 def parse_opts():
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        '--root',
+        default='MUSIC_dataset',
+        type=str,
+        help='root dir')
+    parser.add_argument(
+        '--train_tag_json_path',
+        default='json_data/trainset_tag.json',
+        type=str,
+        help='')
+    parser.add_argument(
+        '--test_tag_json_path',
+        default='json_data/testset_tag.json',
+        type=str,
+        help='')
+    parser.add_argument(
         '--batch_size',
         default=16,
         type=int,

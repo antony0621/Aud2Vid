@@ -7,28 +7,33 @@ import torchvision.utils as tov
 import cv2
 import datetime
 import numpy as np
-import utils.ops
-from utils.utils import *
-from models.vgg_utils import my_vgg
+from src.utils.utils import *
 from src.utils import ops
 from torchvision import transforms as trn
-
 
 preprocess = trn.Compose([
     # trn.ToTensor(),
     trn.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 ])
 
-mean = Vb(torch.FloatTensor([0.485, 0.456, 0.406])).view([1,3,1,1])
-std = Vb(torch.FloatTensor([0.229, 0.224, 0.225])).view([1,3,1,1])
+mean = Vb(torch.FloatTensor([0.485, 0.456, 0.406])).view([1, 3, 1, 1])
+std = Vb(torch.FloatTensor([0.229, 0.224, 0.225])).view([1, 3, 1, 1])
 
 
 def normalize(x):
     gpu_id = x.get_device()
-    return (x- mean.cuda(gpu_id))/std.cuda(gpu_id)
+    return (x - mean.cuda(gpu_id)) / std.cuda(gpu_id)
 
 
-class TrainingLoss(object):
+class LossDefinition(object):
+    """
+    Definition of all the losses in the Aud2Vid structure, including:
+    1. vgg loss, i.e. perceptual loss
+    2. smooth loss for optical flow to ensure local similarity
+    3. KL divergence loss between the posterior inferred from video and the prior from the audio
+    4. SSIM loss
+    5. reconstruction loss
+    """
 
     def __init__(self, opt, flowwarpper):
         self.opt = opt
@@ -70,7 +75,7 @@ class TrainingLoss(object):
     def quickflowloss(self, flow, img, t=1):
         flowloss = 0.
         for ii in range(t):
-                flowloss += self._quickflowloss(flow[:, :, ii, :, :], img[:, ii, :, :, :])
+            flowloss += self._quickflowloss(flow[:, :, ii, :, :], img[:, ii, :, :, :])
         return flowloss
 
     def _flowgradloss(self, flow, image):
@@ -127,9 +132,9 @@ class TrainingLoss(object):
         # for ii in range(opt.num_predicted_frames):
         for ii in range(x.size()[1]):
             sim += opt.alpha_recon_image * self.SSIM(x[:, ii, ...], y[:, ii, ...]) \
-                  + (1 - opt.alpha_recon_image) * F.l1_loss(x[:, ii, ...], y[:, ii, ...])
+                   + (1 - opt.alpha_recon_image) * F.l1_loss(x[:, ii, ...], y[:, ii, ...])
         return sim
-    
+
     def loss_function(self, mu, logvar, bs):
         KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         KLD /= 1000
@@ -156,8 +161,8 @@ class TrainingLoss(object):
         if mask_bw is not None:
             for ii in range(t):
                 flowcon += self._flowconsist(flow[:, :, ii, :, :], flowback[:, :, ii, :, :],
-                                                 mask_fw=mask_fw[:, ii:ii + 1, ...],
-                                                 mask_bw=mask_bw[:, ii:ii + 1, ...])
+                                             mask_fw=mask_fw[:, ii:ii + 1, ...],
+                                             mask_bw=mask_bw[:, ii:ii + 1, ...])
         else:
             for ii in range(t):
                 flowcon += self._flowconsist(flow[:, :, ii, :, :], flowback[:, :, ii, :, :])
@@ -172,18 +177,19 @@ class TrainingLoss(object):
         return loss
 
 
-class losses_multigpu_only_mask(nn.Module):
+class LossesMaskEst(nn.Module):
     def __init__(self, opt, flowwarpper):
-        super(losses_multigpu_only_mask, self).__init__()
-        self.tl = TrainingLoss(opt, flowwarpper)
+        super(LossesMaskEst, self).__init__()
+        self.loss_def = LossDefinition(opt, flowwarpper)
         self.flowwarpper = flowwarpper
         self.opt = opt
 
-    def forward(self, frame1, frame2, y_pred, mu, logvar, flow, flowback, mask_fw, mask_bw, prediction_vgg_feature, gt_vgg_feature,  y_pred_before_refine=None):
+    def forward(self, frame1, frame2, y_pred, mu, logvar, flow, flowback, mask_fw, mask_bw, prediction_vgg_feature,
+                gt_vgg_feature, y_pred_before_refine=None):
         opt = self.opt
         flowwarpper = self.flowwarpper
-        tl = self.tl
-        output = y_pred
+        tl = self.loss_def
+        output = y_pred  # I_0(x + w_b_t(x))
 
         '''flowloss'''
         flowloss = tl.quickflowloss(flow, frame2)
@@ -205,13 +211,15 @@ class losses_multigpu_only_mask(nn.Module):
         sim_loss = tl.image_similarity(output, frame2, opt)
 
         '''reconstruct loss'''
-        prevframe = [torch.unsqueeze(flowwarpper(frame2[:, ii, :, :, :], -flowback[:, :, ii, :, :]* mask_bw[:, ii:ii + 1, ...]), 1)
-                     for ii in range(opt.num_predicted_frames)]
+        prevframe = [
+            torch.unsqueeze(flowwarpper(frame2[:, ii, :, :, :], -flowback[:, :, ii, :, :] * mask_bw[:, ii:ii + 1, ...]),
+                            1)  # I_t(x + w_f_t(x))
+            for ii in range(opt.num_predicted_frames)]
         prevframe = torch.cat(prevframe, 1)
 
         reconloss_back = tl.reconlossT(prevframe,
-                                  torch.unsqueeze(frame1, 1).repeat(1, opt.num_predicted_frames, 1, 1, 1),
-                                  mask=mask_bw, t=opt.num_predicted_frames)
+                                       torch.unsqueeze(frame1, 1).repeat(1, opt.num_predicted_frames, 1, 1, 1),
+                                       mask=mask_bw, t=opt.num_predicted_frames)
         reconloss = tl.reconlossT(output, frame2, t=opt.num_predicted_frames)
 
         if y_pred_before_refine is not None:

@@ -17,10 +17,13 @@ import torch
 import torch.nn as nn
 import torchvision
 from torch.autograd import Variable as Vb
-from basemodule import ConvBNRelU, ConvBase, ConvBlock, UpConv, Conv3d
+
+from src.utils import ops
+from models.basemodule import ConvBNRelU, ConvBase, ConvBlock, UpConv, Conv3d
 import src.opts as opts
-from src.models.vgg_128 import RefineNet
-from src.models.vgg_utils import my_vgg
+from models.vgg.vgg_128 import Flow2Frame_warped
+from models.vgg.vgg_utils import my_vgg
+
 
 class AudioFrameNet(nn.Module):
     def __init__(self, z_dim=1024):
@@ -183,7 +186,8 @@ class VAE(nn.Module):
         self.mask_dec = MaskPredictor()
 
         # post-processing module
-        self.refine_net = RefineNet(num_channels=opt.input_channel)
+        self.flow_wrapper = ops.FlowWrapper()
+        self.refine_net = Flow2Frame_warped(num_channels=opt.input_channel)
 
         # load vgg for perceptual loss
         vgg19 = torchvision.models.vgg19(pretrained=True)
@@ -213,11 +217,11 @@ class VAE(nn.Module):
         mu_v, logvar_v = self.video_enc(video)  # posterior, (bs, 1024), to train and learn the prior
 
         # sample from the prior distribution
-        z_af = self.reparameterize(mu_af, logvar_af)   # (bs, 1024)
+        z_af = self.reparameterize(mu_af, logvar_af)  # (bs, 1024)
 
         # decode and obtain the flows and masks
         codex = hiddens[3]  # representation of the initial frame, (bs, 256, 8, 8)
-        codey = torch.cat([z_af.view(-1, 16, opt.input_size[0]//16, opt.input_size[1] // 16), codex], 1)  # check 16
+        codey = torch.cat([z_af.view(-1, 16, opt.input_size[0] // 16, opt.input_size[1] // 16), codex], 1)  # check 16
         codey = self.z_conv(codey)  # (bs, 16 * n_pred_frames, 8, 8)
         codex = torch.unsqueeze(codex, 2).repeat(1, 1, opt.num_predicted_frames, 1, 1)  # (bs, 256, n_pred_frames, 8, 8)
         codey = torch.cat(torch.chunk(codey.unsqueeze(2), opt.num_predicted_frames, 1), 2)  # (..., 16, ...)
@@ -226,7 +230,8 @@ class VAE(nn.Module):
 
         # flow computation
         flow_forward = self.flow_dec(pre_dec)  # (bs * n_pred_frames, 2, 128, 128), 2 means horizon and vertical
-        flow_forward = torch.cat(flow_forward.unsqueeze(2).chunk(opt.num_predicted_frames, 0), 2)  # (bs, 2, n_pred_frames, 128, 128)
+        flow_forward = torch.cat(flow_forward.unsqueeze(2).chunk(opt.num_predicted_frames, 0),
+                                 2)  # (bs, 2, n_pred_frames, 128, 128)
         flow_backward = self.flow_dec(pre_dec)  # (bs * n_pred_frames, 2, 128, 128), 2 means horizon and vertical
         flow_backward = torch.cat(flow_backward.unsqueeze(2).chunk(opt.num_predicted_frames, 0), 2)
         # mask computation
@@ -236,13 +241,19 @@ class VAE(nn.Module):
         mask_backward = pred_mask[:, 1, ...]
 
         # post-processing to obtain final frames
+        warppede_fw = mask_fw * self.flow_wrapper(frame, flow_forward)
+        pred = self.refine_net(warppede_fw, flow_forward)
 
+        if video is not None:  # i.e. training
+            prediction_vgg_feature = self.vgg_net(
+                self._normalize(pred.contiguous().view(-1, opt.input_channel, opt.input_size[0], opt.input_size[1])))
+            gt_vgg_feature = self.vgg_net(
+                self._normalize(video.contiguous().view(-1, opt.input_channel, opt.input_size[0], opt.input_size[1])))
 
-
-        if video is not None:
-            return mu_af, logvar_af, mu_v, logvar_v, flow_forward, flow_backward, mask_forward, mask_backward
+            return (mu_af, logvar_af, mu_v, logvar_v, flow_forward, flow_backward, mask_forward, mask_backward, pred,
+                    prediction_vgg_feature, gt_vgg_feature)
         else:
-            return flow_forward, flow_backward, mask_forward, mask_backward
+            return flow_forward, flow_backward, mask_forward, mask_backward, pred
 
     def reparameterize(self, mu, logvar):
         if self.training:
@@ -252,6 +263,14 @@ class VAE(nn.Module):
         else:
             return Vb(mu.data.new(mu.size()).normal_())
 
+    def _normalize(self, x):
+        gpu_id = x.get_device()
+        return (x - mean.cuda(gpu_id)) / std.cuda(gpu_id)
+
+
+# the mean and the std of the MUSIC21 should be verified
+mean = Vb(torch.FloatTensor([0.485, 0.456, 0.406])).view([1, 3, 1, 1])
+std = Vb(torch.FloatTensor([0.229, 0.224, 0.225])).view([1, 3, 1, 1])
 
 if __name__ == '__main__':
     # # audio and frame
@@ -274,4 +293,3 @@ if __name__ == '__main__':
     mu, logvar, flow_fw, flow_bw, mask_fw, mask_bw = net(aud, vid)
     print(mu.size(), logvar.size(), flow_fw.size(), flow_bw.size(), mask_fw.size(), mask_bw.size())
     print(mask_fw)
-

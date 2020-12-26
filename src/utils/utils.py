@@ -1,4 +1,4 @@
-from  __future__ import division
+from __future__ import division
 import math
 import os
 import numpy as np
@@ -7,7 +7,7 @@ import imageio
 import cv2
 import torch
 import sys
-from utils import ops
+from src.utils import ops
 
 
 def save_images(images, size, image_path):
@@ -69,12 +69,12 @@ def sharpness(img1, img2):
         return 20 * math.log10(PIXEL_MAX / math.sqrt(grad))
 
 
-def save_samples(data, y_pred_before_refine, y_pred, flow, mask_fw, mask_bw, iteration, sampledir, opt, eval=False, useMask=True,
-                grid=[8, 4], single=False, bidirectional=False):
-
+def save_samples(data, y_pred_before_refine, y_pred, flow, mask_fw, mask_bw, iteration, sampledir, opt, eval=False,
+                 useMask=True,
+                 grid=[8, 4], single=False, bidirectional=False):
     frame1 = data[:, 0, :, :, :]
 
-    num_predicted_frames = y_pred.size()[1] -1
+    num_predicted_frames = y_pred.size()[1] - 1
     num_frames = y_pred.size()[1]
 
     if useMask:
@@ -83,19 +83,18 @@ def save_samples(data, y_pred_before_refine, y_pred, flow, mask_fw, mask_bw, ite
         save_gif(mask_bw.unsqueeze(4).data.cpu().numpy() * 255., num_predicted_frames, grid, sampledir +
                  '/{:06d}_backward_occ_map.gif'.format(iteration))
 
-
     # Save results before refinement
     frame1_ = torch.unsqueeze(frame1, 1)
     if bidirectional:
-        fakegif_before_refinement = torch.cat([y_pred_before_refine[:, 0:3, ...], frame1_.cuda(), y_pred_before_refine[:, 3::, ...]], 1)
+        fakegif_before_refinement = torch.cat(
+            [y_pred_before_refine[:, 0:3, ...], frame1_.cuda(), y_pred_before_refine[:, 3::, ...]], 1)
     else:
         fakegif_before_refinement = torch.cat([frame1_.cuda(), y_pred_before_refine], 1)
     fakegif_before_refinement = fakegif_before_refinement.transpose(2, 3).transpose(3, 4).data.cpu().numpy()
 
-
     # Save reconstructed or sampled video
     if bidirectional:
-        fakegif = torch.cat([y_pred[:,0:3,...], frame1_.cuda(), y_pred[:,3::,...]], 1)
+        fakegif = torch.cat([y_pred[:, 0:3, ...], frame1_.cuda(), y_pred[:, 3::, ...]], 1)
 
     else:
         fakegif = torch.cat([frame1_.cuda(), y_pred], 1)
@@ -118,54 +117,57 @@ def save_samples(data, y_pred_before_refine, y_pred, flow, mask_fw, mask_bw, ite
     else:
         save_file_name = 'recon'
 
-    save_gif(fakegif * 255, num_frames, grid, sampledir + '/{:06d}_%s.gif'.format(iteration)%save_file_name)
+    save_gif(fakegif * 255, num_frames, grid, sampledir + '/{:06d}_%s.gif'.format(iteration) % save_file_name)
     save_gif(fakegif_before_refinement * 255, num_frames, grid,
-             sampledir + '/{:06d}_%s_bf_refine.gif'.format(iteration)%save_file_name)
+             sampledir + '/{:06d}_%s_bf_refine.gif'.format(iteration) % save_file_name)
     # ops.saveflow(_flow, opt.input_size, grid, sampledir + '/{:06d}_%s_flow.jpg'.format(iteration)%save_file_name)
-    ops.save_flow_sequence(_flow, num_predicted_frames, opt.input_size, grid, sampledir + '/{:06d}_%s_flow.gif'.format(iteration) % save_file_name)
+    ops.save_flow_sequence(_flow, num_predicted_frames, opt.input_size, grid,
+                           sampledir + '/{:06d}_%s_flow.gif'.format(iteration) % save_file_name)
 
     if single:
         import scipy.misc
         for i in range(5):
-            scipy.misc.imsave(sampledir +'/{:06d}_'.format(iteration) + str(i)+'.png', fakegif[0,i,...])
+            scipy.misc.imsave(sampledir + '/{:06d}_'.format(iteration) + str(i) + '.png', fakegif[0, i, ...])
 
 
 def save_parameters(flowgen):
     '''Write parameters setting file'''
-    with open(os.path.join(flowgen.parameterdir, 'params.txt'), 'w') as file:
-        file.write(flowgen.jobname)
+    with open(os.path.join(flowgen.parameter_dir, 'params.txt'), 'w') as file:
+        file.write(flowgen.job_name)
         file.write('Training Parameters: \n')
         file.write(str(flowgen.opt) + '\n')
         if flowgen.load:
             file.write('Load pretrained model: ' + str(flowgen.load) + '\n')
             file.write('Iteration to load:' + str(flowgen.iter_to_load) + '\n')
+
+
 import cv2
 
-def save_images(root_dir, data, y_pred, paths, opt):
 
+def save_images(root_dir, data, y_pred, paths, opt):
     frame1 = data[:, 0, :, :, :]
     frame1_ = torch.unsqueeze(frame1, 1)
     frame_sequence = torch.cat([frame1_.cuda(), y_pred], 1)
-    frame_sequence = frame_sequence.permute((0, 1, 3, 4, 2)).cpu().data.numpy()* 255 # batch, num_frame, H, W, C
+    frame_sequence = frame_sequence.permute((0, 1, 3, 4, 2)).cpu().data.numpy() * 255  # batch, num_frame, H, W, C
 
     for i in range(y_pred.size()[0]):
 
         #  save images as gif
-        frames_fo_save = [np.uint8(frame_sequence[i][frame_id]) for frame_id in range(y_pred.size()[1]+1)]
+        frames_fo_save = [np.uint8(frame_sequence[i][frame_id]) for frame_id in range(y_pred.size()[1] + 1)]
         # 3fps
         aux_dir = os.path.join(root_dir, paths[0][i][0:-22])
         if not os.path.isdir(aux_dir):
             os.makedirs(aux_dir)
 
-        imageio.mimsave(os.path.join(root_dir, paths[0][i][0:-4] + '.gif'), frames_fo_save, fps=int(len(paths)*2))
-
+        imageio.mimsave(os.path.join(root_dir, paths[0][i][0:-4] + '.gif'), frames_fo_save, fps=int(len(paths) * 2))
 
         # new added
 
         for j, frame in enumerate(frames_fo_save):
             # import pdb
             # pdb.set_trace()
-            cv2.imwrite(os.path.join(root_dir, paths[0][i][0:-4] + '{:02d}.png'.format(j)), cv2.cvtColor(frame,cv2.COLOR_RGB2BGR))
+            cv2.imwrite(os.path.join(root_dir, paths[0][i][0:-4] + '{:02d}.png'.format(j)),
+                        cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
 
         # for j in range(len(frame_sequence[0])):
         #     # aux_dir = os.path.join(root_dir, paths[j][i][0:-22])
@@ -178,18 +180,16 @@ def save_images(root_dir, data, y_pred, paths, opt):
         #     cv2.imwrite(os.path.join(root_dir, paths[j][i]), frame)
 
 
-
 def save_images_ucf(root_dir, data, y_pred, paths, opt):
-
     frame1 = data[:, 0, :, :, :]
     frame1_ = torch.unsqueeze(frame1, 1)
     frame_sequence = torch.cat([frame1_.cuda(), y_pred], 1)
-    frame_sequence = frame_sequence.permute((0, 1, 3, 4, 2)).cpu().data.numpy()* 255 # batch, num_frame, H, W, C
+    frame_sequence = frame_sequence.permute((0, 1, 3, 4, 2)).cpu().data.numpy() * 255  # batch, num_frame, H, W, C
 
     for i in range(y_pred.size()[0]):
 
         #  save images as gif
-        frames_fo_save = [np.uint8(frame_sequence[i][frame_id]) for frame_id in range(y_pred.size()[1]+1)]
+        frames_fo_save = [np.uint8(frame_sequence[i][frame_id]) for frame_id in range(y_pred.size()[1] + 1)]
         # 3fps
         # import pdb
         # pdb.set_trace()
@@ -197,28 +197,27 @@ def save_images_ucf(root_dir, data, y_pred, paths, opt):
         if not os.path.isdir(aux_dir):
             os.makedirs(aux_dir)
 
-        imageio.mimsave(os.path.join(root_dir, paths[0][i] + '.gif'), frames_fo_save, fps=int(len(paths)*2))
+        imageio.mimsave(os.path.join(root_dir, paths[0][i] + '.gif'), frames_fo_save, fps=int(len(paths) * 2))
 
         # new added
 
         for j, frame in enumerate(frames_fo_save):
             # import pdb
             # pdb.set_trace()
-            cv2.imwrite(os.path.join(root_dir, paths[0][i], '{:02d}.png'.format(j)), cv2.cvtColor(frame,cv2.COLOR_RGB2BGR))
-
+            cv2.imwrite(os.path.join(root_dir, paths[0][i], '{:02d}.png'.format(j)),
+                        cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
 
 
 def save_images_kitti(root_dir, data, y_pred, paths, opt):
-
     frame1 = data[:, 0, :, :, :]
     frame1_ = torch.unsqueeze(frame1, 1)
     frame_sequence = torch.cat([frame1_.cuda(), y_pred], 1)
-    frame_sequence = frame_sequence.permute((0, 1, 3, 4, 2)).cpu().data.numpy()* 255 # batch, num_frame, H, W, C
+    frame_sequence = frame_sequence.permute((0, 1, 3, 4, 2)).cpu().data.numpy() * 255  # batch, num_frame, H, W, C
 
     for i in range(y_pred.size()[0]):
 
         #  save images as gif
-        frames_fo_save = [np.uint8(frame_sequence[i][frame_id]) for frame_id in range(y_pred.size()[1]+1)]
+        frames_fo_save = [np.uint8(frame_sequence[i][frame_id]) for frame_id in range(y_pred.size()[1] + 1)]
         # 3fps
         # import pdb
         # pdb.set_trace()
@@ -226,7 +225,7 @@ def save_images_kitti(root_dir, data, y_pred, paths, opt):
         if not os.path.isdir(aux_dir):
             os.makedirs(aux_dir)
 
-        imageio.mimsave(os.path.join(root_dir, paths[i] + '.gif'), frames_fo_save, fps=int(len(paths)*2))
+        imageio.mimsave(os.path.join(root_dir, paths[i] + '.gif'), frames_fo_save, fps=int(len(paths) * 2))
 
         # new added
 
@@ -234,8 +233,8 @@ def save_images_kitti(root_dir, data, y_pred, paths, opt):
             # import pdb
             # pdb.set_trace()
             frame = cv2.resize(frame, (256, 78))
-            cv2.imwrite(os.path.join(root_dir, paths[i], '{:02d}.png'.format(j)), cv2.cvtColor(frame,cv2.COLOR_RGB2BGR))
-
+            cv2.imwrite(os.path.join(root_dir, paths[i], '{:02d}.png'.format(j)),
+                        cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
 
 
 def save_flows(root_dir, flow, paths):
@@ -250,24 +249,23 @@ def save_flows(root_dir, flow, paths):
 
         # save flow*mask as gif
         # *mask[i][frame_id])
-        flow_fo_save = [np.uint8(ops.compute_flow_color_map(_flow[i][frame_id])) for frame_id in range(len(paths)-1)]
+        flow_fo_save = [np.uint8(ops.compute_flow_color_map(_flow[i][frame_id])) for frame_id in range(len(paths) - 1)]
         # 3fps
-        imageio.mimsave(os.path.join(root_dir, paths[0][i][0:-4] + '.gif'), flow_fo_save, fps=int(len(paths)-1-2))
+        imageio.mimsave(os.path.join(root_dir, paths[0][i][0:-4] + '.gif'), flow_fo_save, fps=int(len(paths) - 1 - 2))
 
         for j in range(flow.size()[2]):
-            ops.saveflow(_flow[i][j], (256, 128), os.path.join(root_dir, paths[j+1][i]))
+            ops.saveflow(_flow[i][j], (256, 128), os.path.join(root_dir, paths[j + 1][i]))
 
 
 def save_occ_map(root_dir, mask, paths):
     mask = mask.data.cpu().numpy() * 255.
     for i in range(mask.shape[0]):
         for j in range(mask.shape[1]):
-            cv2.imwrite(os.path.join(root_dir, paths[j+1][i]), mask[i][j])
+            cv2.imwrite(os.path.join(root_dir, paths[j + 1][i]), mask[i][j])
 
 
 def save_samples_no_flow(data, y_pred, iteration, sampledir, opt, eval=False,
-                grid=[8, 4], single=False, bidirectional=False):
-
+                         grid=[8, 4], single=False, bidirectional=False):
     frame1 = data[:, 0, :, :, :]
     num_frames = y_pred.size()[1]
 
@@ -276,7 +274,7 @@ def save_samples_no_flow(data, y_pred, iteration, sampledir, opt, eval=False,
 
     # Save reconstructed or sampled video
     if bidirectional:
-        fakegif = torch.cat([y_pred[:,0:3,...], frame1_.cuda(), y_pred[:,3::,...]], 1)
+        fakegif = torch.cat([y_pred[:, 0:3, ...], frame1_.cuda(), y_pred[:, 3::, ...]], 1)
 
     else:
         fakegif = torch.cat([frame1_.cuda(), y_pred], 1)
@@ -293,9 +291,9 @@ def save_samples_no_flow(data, y_pred, iteration, sampledir, opt, eval=False,
     else:
         save_file_name = 'recon'
 
-    save_gif(fakegif * 255, num_frames, grid, sampledir + '/{:06d}_%s.gif'.format(iteration)%save_file_name)
+    save_gif(fakegif * 255, num_frames, grid, sampledir + '/{:06d}_%s.gif'.format(iteration) % save_file_name)
 
     if single:
         import scipy.misc
         for i in range(5):
-            scipy.misc.imsave(sampledir +'/{:06d}_'.format(iteration) + str(i)+'.png', fakegif[0,i,...])
+            scipy.misc.imsave(sampledir + '/{:06d}_'.format(iteration) + str(i) + '.png', fakegif[0, i, ...])
