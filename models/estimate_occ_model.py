@@ -13,17 +13,18 @@ And after this work, something related but maybe more interesting should also be
 through a piece of music. The model should be able to capture the content, i.e., what story is the piece sing about?
 """
 
+from collections import OrderedDict
+
 import torch
 import torch.nn as nn
 import torchvision
 from torch.autograd import Variable as Vb
-from collections import OrderedDict
 
-from src.utils import ops
+import opts as opts
 from models.basemodule import ConvBNRelU, ConvBase, ConvBlock, UpConv, Conv3d
-import src.opts as opts
-from models.vgg.vgg_128 import Flow2Frame_warped
-from models.vgg.vgg_utils import my_vgg
+from models.vgg import Flow2Frame_warped
+from models.vgg import my_vgg
+from utils import ops
 
 
 class AudioFrameNet(nn.Module):

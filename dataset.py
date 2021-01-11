@@ -117,13 +117,13 @@ def get_dataloader(root, tag_dir, validation_split=0.1, batch_size=256, is_train
         _val_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False, sampler=val_sampler,
                                  num_workers=8, pin_memory=True)
 
-        return _train_loader, _val_loader, size
+        return _train_loader, _val_loader, len(dataset)
     else:
         test_sampler = SubsetRandomSampler(np.random.permutation(range(dataset.__len__())))
         _test_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False, sampler=test_sampler,
                                   num_workers=8, pin_memory=True)
 
-        return _test_loader, size
+        return _test_loader, len(dataset)
 
 
 if __name__ == '__main__':

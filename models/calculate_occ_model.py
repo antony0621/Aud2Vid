@@ -18,11 +18,11 @@ import torch.nn as nn
 import torchvision
 from torch.autograd import Variable as Vb
 
-from src.utils import ops
+from utils import ops
 from models.basemodule import ConvBNRelU, ConvBase, ConvBlock, UpConv, Conv3d
-import src.opts as opts
-from models.vgg.vgg_128 import RefineNet
-from models.vgg.vgg_utils import my_vgg
+import opts as opts
+from models.vgg import RefineNet
+from models.vgg import my_vgg
 
 
 class AudioFrameNet(nn.Module):

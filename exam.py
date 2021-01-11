@@ -20,7 +20,7 @@ def conv2d(img, kernel):
 
 
 if __name__ == '__main__':
-    image = cv.imread("000069.jpg")
+    image = cv.imread("xxx.jpg")
     g, b, r = cv.split(image)
     image = cv.merge([r, g, b])
     plt.figure()

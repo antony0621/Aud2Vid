@@ -69,7 +69,7 @@ def parse_opts():
     )
     parser.add_argument(
         '--workers',
-        default=3,
+        default=8,
         type=int,
         help='number of workers used for data loading.'
     )

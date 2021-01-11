@@ -159,9 +159,9 @@ class Visualizer:
             self.saved = True
             # # save images to the disk
             # for label, image in visuals.items():
-            #     image_numpy = util.tensor2im(image)
+            #     image_numpy = vis_util.tensor2im(image)
             #     img_path = os.path.join(self.img_dir, 'epoch%.3d_%s.png' % (epoch, label))
-            #     util.save_image(image_numpy, img_path)
+            #     vis_util.save_image(image_numpy, img_path)
 
             # # update website
             # webpage = html.HTML(self.web_dir, 'Experiment name = %s' % self.name, refresh=1)
@@ -170,7 +170,7 @@ class Visualizer:
             #     ims, txts, links = [], [], []
             #
             #     for label, image_numpy in visuals.items():
-            #         image_numpy = util.tensor2im(image)
+            #         image_numpy = vis_util.tensor2im(image)
             #         img_path = 'epoch%.3d_%s.png' % (n, label)
             #         ims.append(img_path)
             #         txts.append(label)

@@ -1,16 +1,13 @@
-import torch
-from torch.autograd import Variable as Vb
+import time
+import os
 import torch.optim as optim
-from torch.utils.data import DataLoader
-import os, time, sys
 
 from models.estimate_occ_model import *
-from src.utils import utils, ops
-import losses
+import losses as losses
 import dataset as ds
-from src.opts import parse_opts
-
-from util.visualizer import Visualizer
+from opts import parse_opts
+from utils import utils
+from vis_util.visualizer import Visualizer
 
 opt = parse_opts()
 print(opt)
@@ -86,7 +83,7 @@ class Aud2Vid(object):
             print('Epoch {}/{}'.format(epoch, opt.num_epochs - 1))
             print('-' * 10)
 
-            for video, audio in self.trainloader: 
+            for video, audio in self.trainloader:
 
                 # get the inputs
                 video = video.cuda()

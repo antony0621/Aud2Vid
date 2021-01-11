@@ -1,17 +1,13 @@
-import torch
-from torch.autograd import Variable as Vb
+from collections import OrderedDict
+
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Variable as Vb
 from torch.distributions import Normal, kl_divergence
-import torch.nn.init as init
-import torchvision.utils as tov
-import cv2
-import datetime
-import numpy as np
-from collections import OrderedDict
-from src.utils.utils import *
-from src.utils import ops
 from torchvision import transforms as trn
+
+from utils import ops
+from utils.utils import *
 
 preprocess = trn.Compose([
     # trn.ToTensor(),
