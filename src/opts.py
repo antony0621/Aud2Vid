@@ -110,6 +110,18 @@ def parse_opts():
         type=str,
         help='model suffix'
     )
+    # visualization config
+    parser.add_argument('--visualized', type=bool, default=False)
+    parser.add_argument('--display_id', type=int, default=1)
+    parser.add_argument('--display_ncols', type=int, default=16,
+                        help='if positive, display all images in a single visdom web panel with certain number of '
+                             'images per row.')
+    parser.add_argument('--display_port', type=int, default=8097, help='visdom display port')
+    parser.add_argument('--display_env', type=str, default='main',
+                        help='visdom display environment name (default is "main")')
+    parser.add_argument('--display_server', type=str, default="http://10.198.8.31",
+                        help='visdom server of the web display')
+    parser.add_argument('--display_winsize', type=int, default=128, help='display window size')
 
     args = parser.parse_args()
 

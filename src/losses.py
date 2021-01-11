@@ -35,6 +35,7 @@ class TrainingLoss(object):
         self.flowwarp = flowwarpper
 
     def gdloss(self, a, b):
+        # second order difference ?
         xloss = torch.sum(
             torch.abs(torch.abs(a[:, :, 1:, :] - a[:, :, :-1, :]) - torch.abs(b[:, :, 1:, :] - b[:, :, :-1, :])))
         yloss = torch.sum(
@@ -47,24 +48,27 @@ class TrainingLoss(object):
             loss += (y_true_feat[i] - y_pred_feat[i]).abs().mean()
         return loss
 
-    def _quickflowloss(self, flow, img, neighber=5, alpha=1):
+    def _quickflowloss(self, flow, img, neighbor=5, alpha=1):
+        """
+        Constraints to make sure neighbor flow to be similar (LK assumption ?)
+        """
         flow = flow * 128
         img = img * 256
         bs, c, h, w = img.size()
-        center = int((neighber - 1) / 2)
+        center = int((neighbor - 1) / 2)  # 0, 1, [2], 3, 4
         loss = []
-        neighberrange = list(range(neighber))
-        neighberrange.remove(center)
-        for i in neighberrange:
-            for j in neighberrange:
+        neighbor_range = list(range(neighbor))
+        neighbor_range.remove(center)
+        for i in neighbor_range:
+            for j in neighbor_range:
                 flowsub = (flow[:, :, center:-center, center:-center] -
-                           flow[:, :, i:h - (neighber - i - 1), j:w - (neighber - j - 1)]) ** 2
+                           flow[:, :, i:h - (neighbor - i - 1), j:w - (neighbor - j - 1)]) ** 2
                 imgsub = (img[:, :, center:-center, center:-center] -
-                          img[:, :, i:h - (neighber - i - 1), j:w - (neighber - j - 1)]) ** 2
+                          img[:, :, i:h - (neighbor - i - 1), j:w - (neighbor - j - 1)]) ** 2
                 flowsub = flowsub.sum(1)
                 imgsub = imgsub.sum(1)
                 indexsub = (i - center) ** 2 + (j - center) ** 2
-                loss.append(flowsub * torch.exp(-alpha * imgsub - indexsub))
+                loss.append(flowsub * torch.exp(-alpha * imgsub - indexsub))  # weight, bilateral flow filtering
         return torch.stack(loss).sum() / (bs * w * h)
 
     def quickflowloss(self, flow, img, t=1):
@@ -95,6 +99,7 @@ class TrainingLoss(object):
         return flow_gradient_loss
 
     def imagegradloss(self, input, target):
+        """TV loss"""
         input_gradx = ops.gradientx(input)
         input_grady = ops.gradienty(input)
 

@@ -17,6 +17,7 @@ import torch
 import torch.nn as nn
 import torchvision
 from torch.autograd import Variable as Vb
+from collections import OrderedDict
 
 from src.utils import ops
 from models.basemodule import ConvBNRelU, ConvBase, ConvBlock, UpConv, Conv3d
@@ -195,37 +196,59 @@ class VAE(nn.Module):
         for param in self.vgg_net.parameters():
             param.requires_grad = False
 
-        pass
+        # viriables to be visualized
+        self.flow_forward = None
+        self.flow_backward = None
+        self.mask_forward = None
+        self.mask_backward = None
+        self.ground_truth = None
+        self.pred = None
+        self.warped_fw = None
 
-    def forward(self, audio, video=None):
+    def forward(self, audio, video=None, is_training=True):
         """
         When training, video is taken as input to estimate a posterior and to help the model to learn a prior from
-        the audio; when test, the prior is directly calculated from the audio, from which the z is sampled.
+        the audio;
+        when test, the prior is directly calculated from the audio, from which the z is sampled according to
+        reparameterized trick according to the estimated mu and var.
+
+        :param is_training: flag
         :param audio: temporal-frequent representation of the raw waveform
         :param video: full-length farmes of the video; video = None means test stage.
         :return: Combined representation of (audio, frame) and video representation
         """
         opt = self.opt
 
-        frame = video[:, 0]  # (bs, 3, 128, 128)
-        frames = video[:, 1:]  # (bs, t-1, 3, 128, 128)
+        frame = video[:, 0]  # (bs, 3, 128, 128), first frame
+        frames = video[:, 1:]  # (bs, t-1, 3, 128, 128), the rest frames
+        # video is the concat of first frame and the residuals of the rest of the sequence
         video = torch.cat([frame, frames.contiguous().view(-1, opt.num_predicted_frames * 3, 128, 128) -
                            frame.repeat(1, opt.num_predicted_frames, 1, 1)], 1)  # (bs, t*3, 128, 128)
 
-        # obtain statistical results from the two distributions
-        mu_af, logvar_af, hiddens = self.aud_fra_enc(audio, frame)  # learned prior, (bs, 1024), to sample from
+        # obtain mu & var from the two distributions, 'af' means audio & a single frame, 'v' means whole video
+        mu_af, logvar_af, hiddens = self.aud_fra_enc(audio, frame)  # learned prior, (bs, 1024), to sample from in test
         mu_v, logvar_v = self.video_enc(video)  # posterior, (bs, 1024), to train and learn the prior
 
-        # sample from the prior distribution
-        z_af = self.reparameterize(mu_af, logvar_af)  # (bs, 1024)
+        if is_training:
+            # stochastic reconstruction
+            mu_pre = mu_v
+            logvar_pre = logvar_v
+        else:
+            # stochastic prediction
+            mu_pre = mu_af
+            logvar_pre = logvar_af
+
+        # sample from the posterior distribution when training and prior distribution when test
+        z_pre = self.reparameterize(mu_pre, logvar_pre)  # (bs, 1024)
 
         # decode and obtain the flows and masks
-        codex = hiddens[3]  # representation of the initial frame, (bs, 256, 8, 8)
-        codey = torch.cat([z_af.view(-1, 16, opt.input_size[0] // 16, opt.input_size[1] // 16), codex], 1)  # check 16
-        codey = self.z_conv(codey)  # (bs, 16 * n_pred_frames, 8, 8)
-        codex = torch.unsqueeze(codex, 2).repeat(1, 1, opt.num_predicted_frames, 1, 1)  # (bs, 256, n_pred_frames, 8, 8)
-        codey = torch.cat(torch.chunk(codey.unsqueeze(2), opt.num_predicted_frames, 1), 2)  # (..., 16, ...)
-        z = torch.cat(torch.unbind(torch.cat([codex, codey], 1), 2), 0)  # (bs * n_pred_frames, 272, 8, 8)
+        data_code = hiddens[3]  # representation of the initial frame, (bs, 256, 8, 8) and the full-length audio
+        distribution_code = torch.cat([z_pre.view(-1, 16, opt.input_size[0] // 16, opt.input_size[1] // 16), data_code], 1)  # check 16
+        distribution_code = self.z_conv(distribution_code)  # (bs, 16 * n_pred_frames, 8, 8)
+        data_code = torch.unsqueeze(data_code, 2).repeat(1, 1, opt.num_predicted_frames, 1, 1)  # (bs, 256, n_pred_frames, 8, 8)
+        distribution_code = torch.cat(torch.chunk(distribution_code.unsqueeze(2), opt.num_predicted_frames, 1), 2)  # (..., 16, ...)
+        
+        z = torch.cat(torch.unbind(torch.cat([data_code, distribution_code], 1), 2), 0)  # (bs * n_pred_frames, 272, 8, 8)
         pre_dec = self.flow_net(hiddens[0], hiddens[1], hiddens[2], z)
 
         # flow computation
@@ -240,11 +263,23 @@ class VAE(nn.Module):
         mask_forward = pred_mask[:, 0, ...]
         mask_backward = pred_mask[:, 1, ...]
 
-        # post-processing to obtain final frames
-        warppede_fw = mask_fw * self.flow_wrapper(frame, flow_forward)
-        pred = self.refine_net(warppede_fw, flow_forward)
+        # post-processing to obtain final frames and use mask before warping
+        warped_fw = ops.warp(frame, flow_forward, opt, self.flow_wrapper, mask_fw)
+        # warped_fw = self.flow_wrapper(frame, mask_fw * flow_forward)
+        pred = self.refine_net(warped_fw, flow_forward)
+
+        # add variables to class, for visualization use
+        self.flow_forward = flow_forward
+        self.flow_backward = flow_backward
+        self.mask_forward = mask_forward
+        self.mask_backward = mask_backward
+        self.ground_truth = video
+        self.warped_fw = warped_fw
+        self.pred = pred
 
         if video is not None:  # i.e. training
+            # is pred or warped_fw fed into the vgg ? prediction_vgg_feature = self.vgg_net( self._normalize(
+            # warped_fw.contiguous().view(-1, opt.input_channel, opt.input_size[0], opt.input_size[1])))
             prediction_vgg_feature = self.vgg_net(
                 self._normalize(pred.contiguous().view(-1, opt.input_channel, opt.input_size[0], opt.input_size[1])))
             gt_vgg_feature = self.vgg_net(
@@ -266,6 +301,28 @@ class VAE(nn.Module):
     def _normalize(self, x):
         gpu_id = x.get_device()
         return (x - mean.cuda(gpu_id)) / std.cuda(gpu_id)
+
+    # display part
+    def obtain_flow_name(self):
+        self.flow_names = ["flow_forward", "flow_backward"]
+
+    def obtain_mask_name(self):
+        self.mask_names = ["mask_forward", "mask_backward"]
+
+    def obtain_pred_name(self):
+        # ground truth, coarse (warped_fw) and refined
+        self.pred_names = ["ground_truth", "warped_fw", "pred"]
+
+    def get_current_var(self, display="flow"):
+        """
+        display: "flow", "mask" or "pred"
+        """
+        visual_dict = OrderedDict()
+        display_list = getattr(self, display+"_names")
+        for name in display_list:
+            if isinstance(name, str):
+                visual_dict[name] = getattr(self, name)
+        return visual_dict
 
 
 # the mean and the std of the MUSIC21 should be verified

@@ -240,7 +240,7 @@ class VAE(nn.Module):
 
     def forward(self, x, data, bg_mask, fg_mask, noise_bg, z_m=None):
 
-        frame1 = data[:, 0, :, :, :]  # bs,3,128,128
+        frame1 = data[:, 0, :, :, :]  # bs,3,128,128, frame1 = x
         frame2 = data[:, 1:, :, :, :]  # bs,t,3,128,128
 
         mask = torch.cat([bg_mask, fg_mask], 1)

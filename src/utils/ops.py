@@ -198,7 +198,7 @@ class FlowWrapper(nn.Module):
         W = x.size()[3]
         base_grid = torch.zeros([N, H, W, 2])
         linear_points = torch.linspace(-1, 1, W) if W > 1 else torch.Tensor([-1])
-        base_grid[:, :, :, 0] = torch.ger(torch.ones(H), linear_points).expand_as(base_grid[:, :, :, 0])
+        base_grid[:, :, :, 0] = torch.ger(torch.ones(H), linear_points).expand_as(base_grid[:, :, :, 0])  # ger:out-prod
         linear_points = torch.linspace(-1, 1, H) if H > 1 else torch.Tensor([-1])
         base_grid[:, :, :, 1] = torch.ger(linear_points, torch.ones(W)).expand_as(base_grid[:, :, :, 1])
         if x.is_cuda:
@@ -208,29 +208,28 @@ class FlowWrapper(nn.Module):
         # print flow.shape
         flow = flow.transpose(1, 2).transpose(2, 3)
         # print flow.size()
-        grid = base_grid - flow
+        grid = base_grid - flow  # + or - makes no difference ?
         # print grid.size()
         out = F.grid_sample(x, grid)
         return out
 
 
-class Warp(nn.Module):
+class ImageWarp(nn.Module):
     """
-    Similar implementation compared with SuperSloMo and DeepSloMo.
+    Simpler implementation compared with SloMo
     """
-    def __init__(self, W, H, opt):
-        super(Warp, self).__init__()
+    def __init__(self, W, H):
+        super(ImageWarp, self).__init__()
         self.W, self.H = W, H
         gridX, gridY = np.meshgrid(np.arange(W), np.arange(H))
-        self.gridX = torch.tensor(gridX / W, requires_grad=False, device=opt.device)
-        self.gridY = torch.tensor(gridY / H, requires_grad=False, device=opt.device)
+        self.gridX = torch.tensor(gridX / W, requires_grad=False)
+        self.gridY = torch.tensor(gridY / H, requires_grad=False)
+        self.grid = torch.stack((self.gridX, self.gridY), 0).unsqueeze(0)
 
     def forward(self, img, flow):
-        u = flow[:, 0, :, :]
-        v = flow[:, 1, :, :]
-        x = self.gridX.unsqueeze(0).expand_as(u).float() + u  # add batch size dim on the grid
-        y = self.gridY.unsqueeze(0).expand_as(v).float() + v
-        grid = torch.stack((x, y), 3)
+        print(self.grid.size())
+        grid = self.grid.expand_as(flow).float() + flow
+        grid = grid.transpose(1, 2).transpose(2, 3)
         out = F.grid_sample(img, grid)
         return out
 
@@ -285,6 +284,8 @@ def length_sq(x):
 
 
 def occlusion(flow, flowback, flowwarp, opt):
+    """See this in UnFlow
+    The mask is decided by the motion magnitude"""
     flow_bw_warped = flowwarp(flow, -flowback)
     flow_fw_warped = flowwarp(flowback, flow)
 
@@ -294,7 +295,7 @@ def occlusion(flow, flowback, flowwarp, opt):
     flow_diff_fw = torch.abs(flow - flow_fw_warped)
     flow_diff_bw = torch.abs(flowback - flow_bw_warped)
 
-    occ_thresh = opt.alpha1 * (length_sq(flow) + length_sq(flowback)) + opt.alpha2
+    occ_thresh = opt.alpha1 * (length_sq(flow) + length_sq(flowback)) + opt.alpha2  # magnitude of motion
 
     occ_fw = (length_sq(flow_diff_fw) > occ_thresh).float().unsqueeze(1)
     occ_bw = (length_sq(flow_diff_bw) > occ_thresh).float().unsqueeze(1)
@@ -304,7 +305,8 @@ def occlusion(flow, flowback, flowwarp, opt):
 
 def get_occlusion_mask(flow, flowback, flowwarpper, opt, t=4):
     """
-    Added: Is this function used in network pipeline orr just in visualization of occluded map ?
+    Ask in Dec 25: Is this function used in network pipeline orr just in visualization of occluded map ?
+    Answer in Jan 8: this is only a demo of the UnFlow method
     """
     mask_fw = []
     mask_bw = []
@@ -335,12 +337,15 @@ def warp_back(frame2, flowback, opt, flowwarpper, mask):
     return output
 
 
-def refine(input, flow, mask, refine_net, opt, noise_bg):
+def refine(input, flow, mask, refine_net, opt, noise_bg=None):
     '''Go through the refine network.'''
     # apply mask to the warpped image
-    out = [torch.unsqueeze(refine_net(input[:, i, ...] * mask[:, i:i + 1, ...] + noise_bg * (1. - mask[:, i:i + 1, ...])
-                                      , flow[:, :, i, :, :]
-                                      ), 1) for i in range(opt.num_predicted_frames)]
+    if noise_bg is not None:
+        out = [torch.unsqueeze(refine_net(input[:, i, ...] * mask[:, i:i + 1, ...] + noise_bg * (1. - mask[:, i:i + 1, ...])
+                                          , flow[:, :, i, :, :]), 1) for i in range(opt.num_predicted_frames)]
+    else:
+        out = [torch.unsqueeze(refine_net(input[:, i, ...] * mask[:, i:i + 1, ...], flow[:, :, i, :, :]),
+                               1) for i in range(opt.num_predicted_frames)]
 
     out = torch.cat(out, 1)
     return out
