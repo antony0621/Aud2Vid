@@ -86,7 +86,7 @@ class Aud2Vid(object):
             print('Epoch {}/{}'.format(epoch, opt.num_epochs - 1))
             print('-' * 10)
 
-            for video, audio in self.trainloader:  # change in Jan 11, remove iter()
+            for video, audio in self.trainloader: 
 
                 # get the inputs
                 video = video.cuda()
@@ -113,7 +113,7 @@ class Aud2Vid(object):
                                                                                  mu_af, logvar_af, mu_v, logvar_v,
                                                                                  flow_forward, flow_backward,
                                                                                  mask_forward, mask_backward,
-                                                                                 pred_vgg_feature, gt_vgg_feature)  
+                                                                                 pred_vgg_feature, gt_vgg_feature)
 
                 loss = (flowloss + 2. * reconloss + reconloss_back + reconloss_before + kldloss * self.opt.lamda +
                         flowcon + sim_loss + vgg_loss + 0.1 * mask_loss)
