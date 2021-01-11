@@ -86,7 +86,7 @@ class Aud2Vid(object):
             print('Epoch {}/{}'.format(epoch, opt.num_epochs - 1))
             print('-' * 10)
 
-            for batch_ind, video, audio in enumerate(self.trainloader):  # change in Jan 11, remove iter()
+            for video, audio in self.trainloader:  # change in Jan 11, remove iter()
 
                 # get the inputs
                 video = video.cuda()
@@ -105,17 +105,18 @@ class Aud2Vid(object):
 
                 # forward + backward + optimize
                 mu_af, logvar_af, mu_v, logvar_v, flow_forward, flow_backward, mask_forward, mask_backward, y_pred, \
-                pred_vgg_feature, gt_vgg_feature = vae(audio, video)
+                pred_vgg_feature, gt_vgg_feature = vae(audio, video, is_training=True)
 
                 # Compute losses
-                flowloss, reconloss, reconloss_back, reconloss_before, kldloss, flowcon, sim_loss, vgg_loss, mask_loss = objective_func(
-                    frame, frames,
-                    y_pred, mu_af, logvar_af, mu_v, logvar_v, flow_forward, flow_backward,
-                    mask_forward, mask_backward, pred_vgg_feature, gt_vgg_feature,
-                    y_pred_before_refine=y_pred_before_refine)
+                flowloss, reconloss, reconloss_back, reconloss_before, \
+                kldloss, flowcon, sim_loss, vgg_loss, mask_loss = objective_func(frame, frames, y_pred,
+                                                                                 mu_af, logvar_af, mu_v, logvar_v,
+                                                                                 flow_forward, flow_backward,
+                                                                                 mask_forward, mask_backward,
+                                                                                 pred_vgg_feature, gt_vgg_feature)  
 
-                loss = (
-                        flowloss + 2. * reconloss + reconloss_back + reconloss_before + kldloss * self.opt.lamda + flowcon + sim_loss + vgg_loss + 0.1 * mask_loss)
+                loss = (flowloss + 2. * reconloss + reconloss_back + reconloss_before + kldloss * self.opt.lamda +
+                        flowcon + sim_loss + vgg_loss + 0.1 * mask_loss)
 
                 # backward
                 loss.backward()
@@ -129,63 +130,51 @@ class Aud2Vid(object):
                     print(
                         "iter {} (epoch {}), recon_loss = {:.6f}, recon_loss_back = {:.3f}, "
                         "recon_loss_before = {:.3f}, flow_loss = {:.6f}, flow_consist = {:.3f}, kl_loss = {:.6f}, "
-                        "img_sim_loss= {:.3f}, vgg_loss= {:.3f}, mask_loss={:.3f}, time/batch = {:.3f}"
-                            .format(iteration, epoch, reconloss.item(), reconloss_back.item(), reconloss_before.item(),
-                                    flowloss.item(), flowcon.item(),
-                                    kldloss.item(), sim_loss.item(), vgg_loss.item(), mask_loss.item(), end - start))
+                        "img_sim_loss= {:.3f}, vgg_loss= {:.3f}, mask_loss={:.3f}, time/batch = {:.3f}".format
+                        (iteration, epoch, reconloss.item(), reconloss_back.item(), reconloss_before.item(),
+                         flowloss.item(), flowcon.item(),
+                         kldloss.item(), sim_loss.item(), vgg_loss.item(), mask_loss.item(), end - start))
 
                     self.visualizer.reset()
 
                     vae.obtain_flow_name()
-                    self.visualizer.display_current_results(vae.get_current_var("flow"), epoch, True, 1, "flow")
+                    self.visualizer.display_current_results(vae.get_current_var("flow"), epoch, True, 3, "flow")
 
                     vae.obtain_mask_name()
-                    self.visualizer.display_current_results(vae.get_current_var("mask"), epoch, True, 2, "mask")
+                    self.visualizer.display_current_results(vae.get_current_var("mask"), epoch, True, 4, "mask")
 
                     vae.obtain_pred_name()
-                    self.visualizer.display_current_results(vae.get_current_var("pred"), epoch, True, 3, "pred")
+                    self.visualizer.display_current_results(vae.get_current_var("pred"), epoch, True, 5, "pred")
 
                 if opt.visualized:
                     # plot loss
                     objective_func.obtain_loss_names()
-                    self.visualizer.plot_current_losses(epoch, counter_ratio=batch_ind / self.n_training_samples,
-                                                        losses=objective_func.get_current_losses())
+                    self.visualizer.plot_current_losses(epoch,
+                                                        iteration / self.n_training_samples,
+                                                        objective_func.get_current_losses())
                     pass
 
-                if iteration % 500 == 0:
-                    utils.save_samples(data, y_pred_before_refine, y_pred, flow, mask_fw, mask_bw, iteration,
-                                       self.sample_dir, opt)
+                # if iteration % 500 == 0:
+                #     utils.save_samples(data, y_pred_before_refine, y_pred, flow, mask_fw, mask_bw, iteration,
+                #                        self.sample_dir, opt)
 
                 if iteration % 2000 == 0:
                     # Set to evaluation mode (randomly sample z from the whole distribution)
                     # no need of video, only audio and first frame for the prediction (cut the inference phase)
-                    with torch.no_grad():
-                        vae.eval()
-                        for val_batch_ind, val_video, val_audio in enumerate(self.valloader):
 
-                            val_video = val_video.cuda()
-                            val_audio = val_audio.cuda()
+                    # # ================== validation ================== #
+                    # with torch.no_grad():
+                    #     vae.eval()
+                    #     for val_batch_ind, val_video, val_audio in enumerate(self.valloader):
+                    #         val_video = val_video.cuda()
+                    #         val_audio = val_audio.cuda()
+                    #
+                    #         val_flow_fw, val_flow_bw, val_mask_fw, val_mask_bw, val_pred = vae(
+                    #             val_video, val_audio, False)
 
-                            val_frame = val_video[:, 0, ...]
-                            val_frames = val_video[:, 1:, ...]
-
-
-
-                        # Read data
-                        data = val_sample.cuda()
-                        bg_mask = val_bg_mask.cuda()
-                        fg_mask = val_fg_mask.cuda()
-                        frame1 = data[:, 0, :, :, :]
-
-                        noise_bg = torch.randn(frame1.size()).cuda()
-                        y_pred_before_refine, y_pred, mu, logvar, flow, flowback, mask_fw, mask_bw = vae(frame1, data,
-                                                                                                         bg_mask,
-                                                                                                         fg_mask,
-                                                                                                         noise_bg)
-
-                    utils.save_samples(data, y_pred_before_refine, y_pred, flow, mask_fw, mask_bw, iteration,
-                                       self.sample_dir, opt,
-                                       eval=True, useMask=True)
+                    # utils.save_samples(data, y_pred_before_refine, y_pred, flow, mask_fw, mask_bw, iteration,
+                    #                    self.sample_dir, opt,
+                    #                    eval=True, useMask=True)
 
                     # Save model's parameter
                     checkpoint_path = self.sample_dir + '/{:06d}_model.pth.tar'.format(iteration)

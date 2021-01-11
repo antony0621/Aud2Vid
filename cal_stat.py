@@ -34,7 +34,7 @@ for frame_class in frames_class_list:
         frames = frames.astype(np.float32) / 255.
 
         for i in range(3):
-            pixels = frames[:, :, i, :].ravel()  # 拉成一行
+            pixels = frames[:, :, i, :].ravel()
             means.append(np.mean(pixels))
             stddevs.append(np.std(pixels))
 

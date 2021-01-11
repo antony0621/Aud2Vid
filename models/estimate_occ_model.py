@@ -247,9 +247,9 @@ class VAE(nn.Module):
         distribution_code = self.z_conv(distribution_code)  # (bs, 16 * n_pred_frames, 8, 8)
         data_code = torch.unsqueeze(data_code, 2).repeat(1, 1, opt.num_predicted_frames, 1, 1)  # (bs, 256, n_pred_frames, 8, 8)
         distribution_code = torch.cat(torch.chunk(distribution_code.unsqueeze(2), opt.num_predicted_frames, 1), 2)  # (..., 16, ...)
-        
+
         z = torch.cat(torch.unbind(torch.cat([data_code, distribution_code], 1), 2), 0)  # (bs * n_pred_frames, 272, 8, 8)
-        pre_dec = self.flow_net(hiddens[0], hiddens[1], hiddens[2], z)
+        pre_dec = self.flow_net(hiddens[0], hiddens[1], hiddens[2], z)  # u-net structure
 
         # flow computation
         flow_forward = self.flow_dec(pre_dec)  # (bs * n_pred_frames, 2, 128, 128), 2 means horizon and vertical
