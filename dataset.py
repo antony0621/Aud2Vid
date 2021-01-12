@@ -17,12 +17,13 @@ from torch.utils.data import DataLoader
 
 def get_files(root, tag_json_path):  # obtain "class_name/tag.mp4/(mp3)" .mp4/ --> frame's dir; .mp3 --> audio's path
     tag_dict = json.load(open(tag_json_path, 'r'))  # {"acoustiic_guitar": [-6dwiJ-m4K4000001, -6dwiJ-m4K4000002...], ...}
-    path_list = []
+    frame_path_list = []
+    audio_path_list = []
     for class_name in tag_dict.keys():
         for tag_name in tag_dict[class_name]:
-            path_list.append(os.path.join(root, class_name, tag_name))
-
-    return path_list
+            frame_path_list.append(os.path.join(root, class_name, tag_name+'.mp4/'))
+            audio_path_list.append(os.path.join(root, class_name, tag_name+'.mp3'))
+    return frame_path_list, audio_path_list
 
 
 def get_frames_as_3d_tensor(frames_path):

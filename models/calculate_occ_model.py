@@ -18,11 +18,11 @@ import torch.nn as nn
 import torchvision
 from torch.autograd import Variable as Vb
 
-from utils import ops
-from models.basemodule import ConvBNRelU, ConvBase, ConvBlock, UpConv, Conv3d
 import opts as opts
+from models.basemodule import ConvBNRelU, ConvBase, ConvBlock, UpConv, Conv3d
 from models.vgg import RefineNet
 from models.vgg import my_vgg
+from utils.ops import FlowWrapper, occlusion, get_occlusion_mask
 
 
 class AudioFrameNet(nn.Module):
@@ -173,7 +173,7 @@ class VAE(nn.Module):
         self.flow_dec = FlowPredictor()
 
         # post-processing module
-        self.flow_wrapper = ops.FlowWrapper
+        self.flow_wrapper = FlowWrapper
         self.refine_net = RefineNet(num_channels=opt.input_channel)
 
         # load vgg for perceptual loss
@@ -221,6 +221,9 @@ class VAE(nn.Module):
                                  2)  # (bs, 2, n_pred_frames, 128, 128)
         flow_backward = self.flow_dec(pre_dec)  # (bs * n_pred_frames, 2, 128, 128), 2 means horizon and vertical
         flow_backward = torch.cat(flow_backward.unsqueeze(2).chunk(opt.num_predicted_frames, 0), 2)
+
+        # mask computation
+        mask_forward, mask_backward = get_occlusion_mask(flow_forward, flow_backward, self.flow_wrapper, self.opt)
 
         # post-processing to obtain final frames
         warppede_fw = self.flow_wrapper()

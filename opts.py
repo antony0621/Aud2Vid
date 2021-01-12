@@ -111,6 +111,7 @@ def parse_opts():
         help='model suffix'
     )
     # visualization config
+    parser.add_argument('--name', type=str, default="Aud2Vid")
     parser.add_argument('--visualized', type=bool, default=False)
     parser.add_argument('--display_id', type=int, default=1)
     parser.add_argument('--display_ncols', type=int, default=16,

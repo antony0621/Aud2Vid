@@ -7,7 +7,7 @@ import imageio
 import cv2
 import torch
 import sys
-from src.utils import ops
+from utils import ops
 
 
 def save_images(images, size, image_path):

@@ -17,14 +17,14 @@ from collections import OrderedDict
 
 import torch
 import torch.nn as nn
-import torchvision
 from torch.autograd import Variable as Vb
 
 import opts as opts
 from models.basemodule import ConvBNRelU, ConvBase, ConvBlock, UpConv, Conv3d
-from models.vgg import Flow2Frame_warped
+from models.vgg import Flow2FrameWarped
 from models.vgg import my_vgg
-from utils import ops
+from models.vgg.load_vgg import vgg19
+from utils.ops import FlowWrapper, warp
 
 
 class AudioFrameNet(nn.Module):
@@ -188,12 +188,12 @@ class VAE(nn.Module):
         self.mask_dec = MaskPredictor()
 
         # post-processing module
-        self.flow_wrapper = ops.FlowWrapper()
-        self.refine_net = Flow2Frame_warped(num_channels=opt.input_channel)
+        self.flow_wrapper = FlowWrapper()
+        self.refine_net = Flow2FrameWarped(num_channels=opt.input_channel)
 
         # load vgg for perceptual loss
-        vgg19 = torchvision.models.vgg19(pretrained=True)
-        self.vgg_net = my_vgg(vgg19)
+        vgg19_model = vgg19(pretrained=True)
+        self.vgg_net = my_vgg(vgg19_model)
         for param in self.vgg_net.parameters():
             param.requires_grad = False
 
@@ -265,7 +265,7 @@ class VAE(nn.Module):
         mask_backward = pred_mask[:, 1, ...]
 
         # post-processing to obtain final frames and use mask before warping
-        warped_fw = ops.warp(frame, flow_forward, opt, self.flow_wrapper, mask_fw)
+        warped_fw = warp(frame, flow_forward, opt, self.flow_wrapper, mask_fw)
         # warped_fw = self.flow_wrapper(frame, mask_fw * flow_forward)
         pred = self.refine_net(warped_fw, flow_forward)
 

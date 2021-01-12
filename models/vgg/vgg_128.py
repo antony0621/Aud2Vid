@@ -2,50 +2,50 @@ import torch
 import torch.nn as nn
 
 
-class vgg_layer(nn.Module):
+class VGGLayer(nn.Module):
     def __init__(self, nin, nout):
-        super(vgg_layer, self).__init__()
+        super(VGGLayer, self).__init__()
         self.main = nn.Sequential(
             nn.Conv2d(nin, nout, 3, 1, 1),
             nn.BatchNorm2d(nout),
             nn.LeakyReLU(0.2, inplace=True)
         )
 
-    def forward(self, input):
-        return self.main(input)
+    def forward(self, x):
+        return self.main(x)
 
 
-class encoder(nn.Module):
+class _Encoder(nn.Module):
     def __init__(self, dim, nc=1):
-        super(encoder, self).__init__()
+        super(_Encoder, self).__init__()
         self.dim = dim
         # 128 x 128
         self.c1 = nn.Sequential(
-            vgg_layer(nc, 64),
-            vgg_layer(64, 64),
+            VGGLayer(nc, 64),
+            VGGLayer(64, 64),
         )
         # 64 x 64
         self.c2 = nn.Sequential(
-            vgg_layer(64, 128),
-            vgg_layer(128, 128),
+            VGGLayer(64, 128),
+            VGGLayer(128, 128),
         )
         # 32 x 32
         self.c3 = nn.Sequential(
-            vgg_layer(128, 256),
-            vgg_layer(256, 256),
-            vgg_layer(256, 256),
+            VGGLayer(128, 256),
+            VGGLayer(256, 256),
+            VGGLayer(256, 256),
         )
         # 16 x 16
         self.c4 = nn.Sequential(
-            vgg_layer(256, 512),
-            vgg_layer(512, 512),
-            vgg_layer(512, 512),
+            VGGLayer(256, 512),
+            VGGLayer(512, 512),
+            VGGLayer(512, 512),
         )
         # 8 x 8
         self.c5 = nn.Sequential(
-            vgg_layer(512, 512),
-            vgg_layer(512, 512),
-            vgg_layer(512, 512),
+            VGGLayer(512, 512),
+            VGGLayer(512, 512),
+            VGGLayer(512, 512),
         )
         # 4 x 4
         self.c6 = nn.Sequential(
@@ -56,8 +56,8 @@ class encoder(nn.Module):
         self.mp = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
         # self.mp = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
 
-    def forward(self, input):
-        h1 = self.c1(input)  # 128 -> 64
+    def forward(self, x):
+        h1 = self.c1(x)  # 128 -> 64
         h2 = self.c2(self.mp(h1))  # 64 -> 32
         h3 = self.c3(self.mp(h2))  # 32 -> 16
         h4 = self.c4(self.mp(h3))  # 16 -> 8
@@ -67,9 +67,9 @@ class encoder(nn.Module):
         return h6, [h1, h2, h3, h4, h5]
 
 
-class decoder(nn.Module):
+class _Decoder(nn.Module):
     def __init__(self, dim, nc=1):
-        super(decoder, self).__init__()
+        super(_Decoder, self).__init__()
         self.dim = dim
         # 1 x 1 -> 4 x 4
         self.upc1 = nn.Sequential(
@@ -79,37 +79,37 @@ class decoder(nn.Module):
         )
         # 8 x 8
         self.upc2 = nn.Sequential(
-            vgg_layer(512 * 2, 512),
-            vgg_layer(512, 512),
-            vgg_layer(512, 512)
+            VGGLayer(512 * 2, 512),
+            VGGLayer(512, 512),
+            VGGLayer(512, 512)
         )
         # 16 x 16
         self.upc3 = nn.Sequential(
-            vgg_layer(512 * 2, 512),
-            vgg_layer(512, 512),
-            vgg_layer(512, 256)
+            VGGLayer(512 * 2, 512),
+            VGGLayer(512, 512),
+            VGGLayer(512, 256)
         )
         # 32 x 32
         self.upc4 = nn.Sequential(
-            vgg_layer(256 * 2, 256),
-            vgg_layer(256, 256),
-            vgg_layer(256, 128)
+            VGGLayer(256 * 2, 256),
+            VGGLayer(256, 256),
+            VGGLayer(256, 128)
         )
         # 64 x 64
         self.upc5 = nn.Sequential(
-            vgg_layer(128 * 2, 128),
-            vgg_layer(128, 64)
+            VGGLayer(128 * 2, 128),
+            VGGLayer(128, 64)
         )
         # 128 x 128
         self.upc6 = nn.Sequential(
-            vgg_layer(64 * 2, 64),
+            VGGLayer(64 * 2, 64),
             nn.ConvTranspose2d(64, nc, 3, 1, 1),
             nn.Sigmoid()
         )
         self.up = nn.Upsample(scale_factor=2., mode='bilinear')
 
-    def forward(self, input):
-        vec, skip = input
+    def forward(self, x):
+        vec, skip = x
         d1 = self.upc1(vec)  # 1 -> 4
         # d1 = self.upc1(vec.view(-1, self.dim, 1, 1)) # 1 -> 4
         up1 = self.up(d1)  # 4 -> 8
@@ -125,13 +125,13 @@ class decoder(nn.Module):
         return output
 
 
-class Flow2Frame_warped(nn.Module):
+class Flow2FrameWarped(nn.Module):
     def __init__(self, num_channels):
-        super(Flow2Frame_warped, self).__init__()
+        super(Flow2FrameWarped, self).__init__()
         # input shape [batch, 3, 128, 128]
-        self.flow_encoder = encoder(dim=512, nc=2)
-        self.image_encoder = encoder(dim=1024, nc=num_channels)
-        self.image_decoder = decoder(dim=1024 + 512, nc=num_channels)
+        self.flow_encoder = _Encoder(dim=512, nc=2)
+        self.image_encoder = _Encoder(dim=1024, nc=num_channels)
+        self.image_decoder = _Decoder(dim=1024 + 512, nc=num_channels)
 
     def forward(self, warped_img, flow):
         img_hidden, img_skip = self.image_encoder(warped_img)
@@ -150,8 +150,8 @@ class RefineNet(nn.Module):
         super(RefineNet, self).__init__()
         # input shape [batch, 3, 128, 128]
         # self.flow_encoder = encoder(dim=512, nc=2)
-        self.image_encoder = encoder(dim=1024, nc=num_channels)
-        self.image_decoder = decoder(dim=1024, nc=num_channels)
+        self.image_encoder = _Encoder(dim=1024, nc=num_channels)
+        self.image_decoder = _Decoder(dim=1024, nc=num_channels)
 
     def forward(self, warped_img, flow):
         img_hidden, img_skip = self.image_encoder(warped_img)

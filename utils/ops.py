@@ -1,15 +1,15 @@
 from __future__ import division
+
+import datetime
+
+import cv2
+import numpy as np
 import torch
-# import vgg
-from torch.autograd import Variable as Vb
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.nn.init as init
-import torchvision.utils  as tov
-import cv2
-import datetime
-import numpy as np
-from src.losses import TrainingLoss
+import torchvision.utils as tov
+# import vgg
+from torch.autograd import Variable as Vb
 
 
 def make_color_wheel():
@@ -218,6 +218,7 @@ class ImageWarp(nn.Module):
     """
     Simpler implementation compared with SloMo
     """
+
     def __init__(self, W, H):
         super(ImageWarp, self).__init__()
         self.W, self.H = W, H
@@ -341,8 +342,9 @@ def refine(input, flow, mask, refine_net, opt, noise_bg=None):
     '''Go through the refine network.'''
     # apply mask to the warpped image
     if noise_bg is not None:
-        out = [torch.unsqueeze(refine_net(input[:, i, ...] * mask[:, i:i + 1, ...] + noise_bg * (1. - mask[:, i:i + 1, ...])
-                                          , flow[:, :, i, :, :]), 1) for i in range(opt.num_predicted_frames)]
+        out = [torch.unsqueeze(
+            refine_net(input[:, i, ...] * mask[:, i:i + 1, ...] + noise_bg * (1. - mask[:, i:i + 1, ...])
+                       , flow[:, :, i, :, :]), 1) for i in range(opt.num_predicted_frames)]
     else:
         out = [torch.unsqueeze(refine_net(input[:, i, ...] * mask[:, i:i + 1, ...], flow[:, :, i, :, :]),
                                1) for i in range(opt.num_predicted_frames)]
