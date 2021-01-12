@@ -49,16 +49,22 @@ class Aud2Vid(object):
     def train(self):
 
         opt = self.opt
-        gpu_ids = range(torch.cuda.device_count())
+        ## ====== new ====== ##
+        use_gpu = torch.cuda.is_available()
+        print(use_gpu)
+        device = torch.device('cuda:0' if use_gpu else 'cpu')
+
+        ## ====== new ====== ##
+        gpu_ids = list(range(torch.cuda.device_count()))
         print('Number of GPUs in use {}'.format(gpu_ids))
 
         iteration = 0
 
-        vae = VAE(opt=opt).cuda()
+        vae = VAE(opt=opt).to(device)
         if torch.cuda.device_count() > 1:
-            vae = nn.DataParallel(vae).cuda()
+            vae = nn.DataParallel(vae, gpu_ids)
 
-        objective_func = losses.LossesMaskEst(opt, vae.module.floww)
+        objective_func = losses.LossesMaskEst(opt, vae.module.flow_wrapper)
 
         print(self.job_name)
 
@@ -86,8 +92,8 @@ class Aud2Vid(object):
             for video, audio in self.trainloader:
 
                 # get the inputs
-                video = video.cuda()
-                audio = audio.cuda()
+                video = video.to(device)
+                audio = audio.to(device)
 
                 frame = video[:, 0, :, :, :]
                 frames = video[:, 1:, :, :, :]
@@ -163,8 +169,8 @@ class Aud2Vid(object):
                     # with torch.no_grad():
                     #     vae.eval()
                     #     for val_batch_ind, val_video, val_audio in enumerate(self.valloader):
-                    #         val_video = val_video.cuda()
-                    #         val_audio = val_audio.cuda()
+                    #         val_video = val_video.to(device)
+                    #         val_audio = val_audio.to(device)
                     #
                     #         val_flow_fw, val_flow_bw, val_mask_fw, val_mask_bw, val_pred = vae(
                     #             val_video, val_audio, False)

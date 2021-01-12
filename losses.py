@@ -205,7 +205,7 @@ class LossesMaskEst(nn.Module):
     """
     def __init__(self, opt, flowwarpper):
         super(LossesMaskEst, self).__init__()
-        self.loss_def = LossDefinition(opt, flowwarpper)
+        self.loss_def = LossDefinition(flowwarpper)
         self.flowwarpper = flowwarpper
         self.opt = opt
 

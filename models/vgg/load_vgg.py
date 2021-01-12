@@ -5,7 +5,7 @@ from typing import cast
 
 class VGG(nn.Module):
 
-    def __init__(self, features, num_classes, init_weights):
+    def __init__(self, features, num_classes=1000, init_weights=True):
         super(VGG, self).__init__()
         self.features = features
         self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
@@ -67,14 +67,14 @@ cfgs = {
 }
 
 
-def _vgg(cfg, batch_norm=False, pretrained=True, **kwargs):
+def _vgg(cfg, batch_norm=False, pretrained=False, **kwargs):
     if pretrained:
         kwargs['init_weights'] = False
     model = VGG(make_layers(cfgs[cfg], batch_norm=batch_norm), **kwargs)
     if pretrained:
         # state_dict = load_state_dict_from_url(vgg19_urls[arch],
         #                                       progress=progress)
-        state_dict = torch.load('vgg19-dcbb9e9d.pth')
+        state_dict = torch.load('/mnt/lustre/dengandong/Aud2Vid/models/vgg/vgg19-dcbb9e9d.pth')
         model.load_state_dict(state_dict)
     return model
 
@@ -87,4 +87,4 @@ def vgg19(pretrained=False, **kwargs):
 
 
 if __name__ == '__main__':
-    vgg19 = vgg19(pretrained=True)
+    model = vgg19(pretrained=True)
